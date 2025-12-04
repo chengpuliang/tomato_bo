@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-enum TimerState { start, pause, stop }
+enum TimerState { running, paused, stop }
 
 enum TaskType { work, rest }
 
@@ -54,7 +54,8 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int timerState = 0;
+  TimerState _timerState = TimerState.stop;
+  Timer? _timer;
   List<Task> tasks = [
     Task(
         name: "Study Math",
@@ -78,23 +79,40 @@ class _MyHomePageState extends State<MyHomePage> {
         taskColor: TaskColor.blue),
   ];
   int t = 0;
-  void startTimer() {
-    Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (timerState == 0) {
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void _startTimer() {
+    if (_timerState == TimerState.running) return;
+    setState(() {
+      _timerState = TimerState.running;
+    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_timerState != TimerState.running) {
         timer.cancel();
-      } else {
-        setState(() {
-          t--;
-        });
-        if (t == 0) {
-          HapticFeedback.vibrate();
-          tasks.removeAt(0);
-          setState(() {
-            t = (tasks.isNotEmpty) ? tasks[0].duration : 0;
-            timerState = (timerState == 0) ? 1 : 0;
-          });
-        }
+        return;
       }
+      setState(() {
+        t--;
+      });
+      if (t <= 0) {
+        HapticFeedback.vibrate();
+        tasks.removeAt(0);
+        setState(() {
+          t = (tasks.isNotEmpty) ? tasks[0].duration : 0;
+          _timerState = TimerState.stop;
+        });
+      }
+    });
+  }
+
+  void _pauseTimer() {
+    _timer?.cancel();
+    setState(() {
+      _timerState = TimerState.paused;
     });
   }
 
@@ -104,6 +122,12 @@ class _MyHomePageState extends State<MyHomePage> {
     if (tasks.isNotEmpty) {
       t = tasks[0].duration;
     }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -141,7 +165,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 height: 10,
               ),
               Text(
-                "${(t ~/ 60 > 9) ? "" : "0"}${t ~/ 60}:${(t % 60 > 9) ? "" : "0"}${t % 60}",
+                _formatTime(t),
                 style: const TextStyle(
                     fontSize: 45.0, fontWeight: FontWeight.bold),
               ),
@@ -149,16 +173,17 @@ class _MyHomePageState extends State<MyHomePage> {
                 height: 10,
               ),
               ElevatedButton.icon(
-                label: Text((timerState == 0) ? "開始" : "暫停"),
+                label: Text((_timerState != TimerState.running) ? "開始" : "暫停"),
                 onPressed: () {
-                  setState(() {
-                    timerState = (timerState == 0) ? 1 : 0;
-                  });
-                  startTimer();
+                  if (_timerState == TimerState.running) {
+                    _pauseTimer();
+                  } else {
+                    _startTimer();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   fixedSize: const Size(160, 40),
-                  backgroundColor: (timerState == 0)
+                  backgroundColor: (TimerState.running != _timerState)
                       ? const Color.fromRGBO(11, 189, 184, 1.0)
                       : const Color.fromRGBO(245, 208, 118, 1.0),
                   foregroundColor: Colors.white,
@@ -171,15 +196,17 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         DraggableScrollableSheet(
-          initialChildSize: 0.17,
-          minChildSize: 0.17,
+          initialChildSize: 0.24,
+          minChildSize: 0.24,
           maxChildSize: 0.95,
           snap: true,
+          expand: true,
           builder: (BuildContext context, ScrollController scrollController) {
             return Stack(
               children: [
                 Container(
-                  padding: const EdgeInsets.fromLTRB(12, 50, 12, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 100, 12, 8),
+                  height: double.infinity,
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(16),
@@ -225,8 +252,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.bold)),
                                           const Spacer(),
-                                          Text(
-                                              "${(task.duration ~/ 60 > 9) ? "" : "0"}${task.duration ~/ 60}:${(task.duration % 60 > 9) ? "" : "0"}${task.duration % 60}",
+                                          Text(_formatTime(t),
                                               style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,
@@ -255,6 +281,20 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 40.0, left: 20.0, right: 20.0),
+                  child: Row(
+                    children: [
+                      const Text(
+                        "任務列表",
+                        style: TextStyle(
+                            fontSize: 16.0, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      IconButton(onPressed: () {}, icon: const Icon(Icons.add))
+                    ],
+                  ),
+                )
               ],
             );
           },
