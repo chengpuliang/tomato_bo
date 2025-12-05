@@ -1,29 +1,44 @@
 import 'dart:math';
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 enum TimerState { running, paused, stop }
 
-enum TaskType { work, rest }
+class TaskType {
+  static const work = 0;
+  static const rest = 1;
+}
 
 class TaskColor {
-  static const red = Colors.red;
-  static const green = Colors.green;
-  static const blue = Colors.blue;
+  static const red = 0xFFFF0000;
+  static const green = 0xFF00FF00;
+  static const blue = 0xFF0000FF;
 }
 
 class Task {
   final String name;
-  final TaskType type;
+  final int type;
   final int duration; // in seconds
-  final MaterialColor taskColor;
+  final int taskColor;
 
   Task(
       {required this.name,
       required this.type,
       required this.duration,
       required this.taskColor});
+
+  Map<String, dynamic> toMap() {
+    Map<String, dynamic> task = {
+      "name": name,
+      "type": type,
+      "duration": duration,
+      "taskColor": taskColor
+    };
+    return task;
+  }
 }
 
 void main() {
@@ -56,33 +71,26 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   TimerState _timerState = TimerState.stop;
   Timer? _timer;
-  List<Task> tasks = [
-    Task(
-        name: "Study Math",
-        type: TaskType.work,
-        duration: 2,
-        taskColor: TaskColor.red),
-    Task(
-        name: "Short Break",
-        type: TaskType.rest,
-        duration: 3,
-        taskColor: TaskColor.green),
-    Task(
-        name: "Study Science",
-        type: TaskType.work,
-        duration: 4,
-        taskColor: TaskColor.red),
-    Task(
-        name: "Long Break",
-        type: TaskType.rest,
-        duration: 5,
-        taskColor: TaskColor.blue),
-  ];
+  List<Task> tasks = [];
+  final PageController _pageController = PageController();
   int t = 0;
+  static const String packageName = "com.example.tomato_bo";
+  static const String filesPath = "/data/data/$packageName/files";
   String _formatTime(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void saveTask() async {
+    List<Map<String, dynamic>> taskList = [];
+    for (var task in tasks) {
+      taskList.add(task.toMap());
+    }
+    ;
+    final file = File("$filesPath/tasks.json");
+    await file.writeAsString(jsonEncode(taskList));
+    print(jsonEncode(taskList));
   }
 
   void _startTimer() {
@@ -119,9 +127,23 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    if (tasks.isNotEmpty) {
-      t = tasks[0].duration;
-    }
+    File("$filesPath/tasks.json").readAsString().then((s) {
+      List<Task> ti = [];
+      List<dynamic> decoded = jsonDecode(s);
+      for (final task in decoded) {
+        ti.add(Task(
+            name: task["name"],
+            type: task["type"],
+            duration: task["duration"],
+            taskColor: task["taskColor"]));
+      }
+      setState(() {
+        tasks.addAll(ti);
+        if (tasks.isNotEmpty) {
+          t = tasks[0].duration;
+        }
+      });
+    });
   }
 
   @override
@@ -205,71 +227,45 @@ class _MyHomePageState extends State<MyHomePage> {
             return Stack(
               children: [
                 Container(
-                  padding: const EdgeInsets.fromLTRB(12, 100, 12, 8),
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: 5,
+                    padding: const EdgeInsets.fromLTRB(12, 50, 12, 8),
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
                       ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    child: Column(
-                      children: [
-                        for (final task in tasks)
-                          Dismissible(
-                              key: UniqueKey(),
-                              onDismissed: (direction) {
-                                setState(() {
-                                  tasks.remove(task);
-                                  if (tasks.isNotEmpty) {
-                                    t = tasks[0].duration;
-                                  } else {
-                                    t = 0;
-                                  }
-                                });
-                              },
-                              child: Column(
-                                children: [
-                                  Card(
-                                    color: task.taskColor,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(14.0),
-                                      child: Row(
-                                        children: [
-                                          Text(task.name,
-                                              style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold)),
-                                          const Spacer(),
-                                          Text(_formatTime(t),
-                                              style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(
-                                    height: 15,
-                                  ),
-                                ],
-                              )),
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          spreadRadius: 5,
+                        ),
                       ],
                     ),
-                  ),
-                ),
+                    child: LayoutBuilder(
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                        // 計算 PageView 可用的最大高度
+                        // constraints.maxHeight 是 Container 內容區域的可用高度
+                        final double pageViewHeight = constraints.maxHeight;
+
+                        return SizedBox(
+                          height: pageViewHeight, // 給 PageView 一個有限的高度
+                          child: PageView(
+                            controller: _pageController,
+                            // PageView 內部的滾動將由其自身控制
+                            children: [
+                              // 頁面 1: 任務列表 (可垂直滾動)
+                              _buildTaskListPage(scrollController),
+
+                              // 頁面 2: 新增任務 (可垂直滾動)
+                              _buildAddTaskPage(scrollController),
+                            ],
+                          ),
+                        );
+                      },
+                    )),
                 const Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
@@ -281,25 +277,196 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 40.0, left: 20.0, right: 20.0),
-                  child: Row(
-                    children: [
-                      const Text(
-                        "任務列表",
-                        style: TextStyle(
-                            fontSize: 16.0, fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.add))
-                    ],
-                  ),
-                )
               ],
             );
           },
         ),
       ]),
+    );
+  }
+
+  Widget _buildTaskListPage(ScrollController scrollController) {
+    // 為了讓 DraggableScrollableSheet 的拖曳和內容滾動協同工作，
+    // 我們將 PageView 內部的內容再次包裹在 SingleChildScrollView 中，
+    // 並傳遞 DraggableScrollableSheet 提供的 scrollController。
+    final bool isCurrentPage = _pageController.hasClients
+        ? _pageController.page?.round() == 0
+        : _pageController.initialPage == 0;
+    return SingleChildScrollView(
+      controller: isCurrentPage ? scrollController : null, // 只有在當前頁面時才使用主滾動控制器
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 10.0, bottom: 5.0),
+            child: Row(
+              children: [
+                const Text(
+                  "任務列表",
+                  style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                // 點擊按鈕切換到第二頁
+                IconButton(
+                  onPressed: () {
+                    _pageController.nextPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          ),
+          // 列表內容
+          for (final task in tasks)
+            Dismissible(
+              key: UniqueKey(),
+              onDismissed: (direction) {
+                setState(() {
+                  tasks.remove(task);
+                  // 您的 t, saveTask 邏輯...
+                  if (tasks.isNotEmpty) {
+                    t = tasks[0].duration;
+                  } else {
+                    t = 0;
+                  }
+                  saveTask();
+                });
+              },
+              child: Column(
+                children: [
+                  Card(
+                    color: Color(task.taskColor),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: Row(
+                        children: [
+                          Text(task.name,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          Text(_formatTime(t),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                ],
+              ),
+            ),
+          const SizedBox(height: 200), // 增加一些高度來測試滾動
+        ],
+      ),
+    );
+  }
+
+  // 新增任務頁面
+  Widget _buildAddTaskPage(ScrollController scrollController) {
+    // 新增任務頁面也需要包裹在 SingleChildScrollView 中，以便在表單很長時可以滾動
+    final bool isCurrentPage = _pageController.hasClients
+        ? _pageController.page?.round() == 1
+        : _pageController.initialPage == 1;
+    int _workType = 0;
+    final nameTEC = TextEditingController();
+
+    return SingleChildScrollView(
+      controller: isCurrentPage ? scrollController : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // 點擊返回第一頁
+              IconButton(
+                onPressed: () {
+                  _pageController.previousPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                icon: const Icon(Icons.arrow_back),
+              ),
+              const Text(
+                "新增任務",
+                style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<int>(
+                  decoration: const InputDecoration(
+                    labelText: '型別',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 0,
+                      child: Text("工作"),
+                    ),
+                    DropdownMenuItem(
+                      value: 1,
+                      child: Text("休息"),
+                    )
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _workType = value!;
+                    });
+                  },
+                  value: _workType,
+                ),
+                const SizedBox(
+                  height: 20.0,
+                ),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: "名稱",
+                    border: OutlineInputBorder(),
+                  ),
+                  controller: nameTEC,
+                ),
+                const SizedBox(
+                  height: 20.0,
+                ),
+                const Text(
+                  "  時間長度",
+                  textAlign: TextAlign.start,
+                  style: TextStyle(color: Colors.black87),
+                ),
+                ElevatedButton.icon(
+                  label:
+                      const Text("新增"),
+                  onPressed: () {
+                    setState(() {
+                      tasks.add(Task(name: nameTEC.text,type: _workType, duration: 5, taskColor: 0xFFFF0000));
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12), 
+                    ),
+                  ),
+                ),
+                // ... 更多表單元件
+              ],
+            ),
+          ),
+          const SizedBox(height: 300), // 增加高度來測試滾動
+        ],
+      ),
     );
   }
 }
