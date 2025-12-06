@@ -1,11 +1,11 @@
 import 'dart:math';
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tomato_bo/analysis.dart';
+import 'package:tomato_bo/taskservice.dart';
 
-enum TimerState { running, paused, stop }
+enum TimerState { running, paused, stopped }
 
 class TaskType {
   static const work = 0;
@@ -21,7 +21,7 @@ class TaskColor {
 class Task {
   final String name;
   final int type;
-  final int duration; // in seconds
+  final int duration;
   final int taskColor;
 
   Task(
@@ -30,67 +30,67 @@ class Task {
       required this.duration,
       required this.taskColor});
 
-  Map<String, dynamic> toMap() {
-    Map<String, dynamic> task = {
-      "name": name,
-      "type": type,
-      "duration": duration,
-      "taskColor": taskColor
-    };
-    return task;
-  }
+  Map<String, dynamic> toMap() => {
+        "name": name,
+        "type": type,
+        "duration": duration,
+        "taskColor": taskColor
+      };
+
+  factory Task.fromMap(Map<String, dynamic> m) => Task(
+        name: m['name'] ?? '',
+        type: (m['type'] ?? TaskType.work) as int,
+        duration: (m['duration'] ?? 0) as int,
+        taskColor: (m['taskColor'] ?? TaskColor.red) as int,
+      );
 }
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  final taskService = TaskService();
+  await taskService.loadTasks();
+  runApp(MyApp(taskService: taskService));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.taskService});
+  final TaskService taskService;
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tomato Bo',
+      debugShowCheckedModeBanner: false, //Disable debug banner on top right
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Tomato Bo'),
+      home: MyHomePage(
+        title: 'Tomato Bo',
+        taskService: taskService,
+      ),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({super.key, required this.title, required this.taskService});
   final String title;
+  final TaskService taskService;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  TimerState _timerState = TimerState.stop;
+  TimerState _timerState = TimerState.stopped;
   Timer? _timer;
-  List<Task> tasks = [];
   final PageController _pageController = PageController();
+  final DraggableScrollableController _draggableScrollableController =
+      DraggableScrollableController();
   int t = 0;
-  static const String packageName = "com.example.tomato_bo";
-  static const String filesPath = "/data/data/$packageName/files";
   String _formatTime(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-
-  void saveTask() async {
-    List<Map<String, dynamic>> taskList = [];
-    for (var task in tasks) {
-      taskList.add(task.toMap());
-    }
-    ;
-    final file = File("$filesPath/tasks.json");
-    await file.writeAsString(jsonEncode(taskList));
-    print(jsonEncode(taskList));
   }
 
   void _startTimer() {
@@ -99,19 +99,17 @@ class _MyHomePageState extends State<MyHomePage> {
       _timerState = TimerState.running;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_timerState != TimerState.running) {
-        timer.cancel();
-        return;
-      }
       setState(() {
         t--;
       });
       if (t <= 0) {
         HapticFeedback.vibrate();
-        tasks.removeAt(0);
+        widget.taskService.removeAt(0);
         setState(() {
-          t = (tasks.isNotEmpty) ? tasks[0].duration : 0;
-          _timerState = TimerState.stop;
+          t = (widget.taskService.tasks.isNotEmpty)
+              ? widget.taskService.tasks[0].duration
+              : 0;
+          _timerState = TimerState.stopped;
         });
       }
     });
@@ -127,28 +125,16 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    File("$filesPath/tasks.json").readAsString().then((s) {
-      List<Task> ti = [];
-      List<dynamic> decoded = jsonDecode(s);
-      for (final task in decoded) {
-        ti.add(Task(
-            name: task["name"],
-            type: task["type"],
-            duration: task["duration"],
-            taskColor: task["taskColor"]));
-      }
-      setState(() {
-        tasks.addAll(ti);
-        if (tasks.isNotEmpty) {
-          t = tasks[0].duration;
-        }
-      });
-    });
+    t = (widget.taskService.tasks.isNotEmpty)
+      ? widget.taskService.tasks[0].duration
+      : 0;
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _pageController.dispose();
+    _draggableScrollableController.dispose();
     super.dispose();
   }
 
@@ -159,18 +145,24 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Colors.white,
         title: Text(widget.title),
         actions: <Widget>[
-          IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.addchart,
-                color: Colors.black,
-              ))
+          Padding(
+              padding: const EdgeInsets.only(right: 5.0),
+              child: IconButton(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) {
+                    return const AnalysisPage();
+                  }));
+                },
+                icon: const ImageIcon(
+                  AssetImage("assets/analysis.png"),
+                  size: 20.0,
+                ),
+              )),
         ],
       ),
       body: Stack(children: [
         Center(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
               const SizedBox(
                 height: 70,
@@ -178,6 +170,9 @@ class _MyHomePageState extends State<MyHomePage> {
               CustomPaint(
                 painter: ClockPainter(n: t),
                 size: const Size(100, 250),
+              ),
+              const SizedBox(
+                height: 45,
               ),
               const Text(
                 "鬧鐘",
@@ -195,7 +190,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 height: 10,
               ),
               ElevatedButton.icon(
-                label: Text((_timerState != TimerState.running) ? "開始" : "暫停"),
+                label: Text(switch (_timerState) {
+                  TimerState.stopped => "開始",
+                  TimerState.paused => "繼續",
+                  TimerState.running => "暫停",
+                }),
                 onPressed: () {
                   if (_timerState == TimerState.running) {
                     _pauseTimer();
@@ -210,7 +209,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       : const Color.fromRGBO(245, 208, 118, 1.0),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12), // <-- Radius
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -218,16 +217,16 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         DraggableScrollableSheet(
+          controller: _draggableScrollableController,
           initialChildSize: 0.24,
           minChildSize: 0.24,
           maxChildSize: 0.95,
           snap: true,
-          expand: true,
           builder: (BuildContext context, ScrollController scrollController) {
             return Stack(
               children: [
                 Container(
-                    padding: const EdgeInsets.fromLTRB(12, 50, 12, 8),
+                    padding: const EdgeInsets.fromLTRB(12, 24, 12, 8),
                     height: double.infinity,
                     decoration: BoxDecoration(
                       borderRadius: const BorderRadius.only(
@@ -245,37 +244,28 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     child: LayoutBuilder(
                       builder:
-                          (BuildContext context, BoxConstraints constraints) {
-                        // 計算 PageView 可用的最大高度
-                        // constraints.maxHeight 是 Container 內容區域的可用高度
-                        final double pageViewHeight = constraints.maxHeight;
-
-                        return SizedBox(
-                          height: pageViewHeight, // 給 PageView 一個有限的高度
-                          child: PageView(
-                            controller: _pageController,
-                            // PageView 內部的滾動將由其自身控制
-                            children: [
-                              // 頁面 1: 任務列表 (可垂直滾動)
-                              _buildTaskListPage(scrollController),
-
-                              // 頁面 2: 新增任務 (可垂直滾動)
-                              _buildAddTaskPage(scrollController),
-                            ],
-                          ),
-                        );
-                      },
+                          (BuildContext context, BoxConstraints constraints) =>
+                              PageView(
+                        controller: _pageController,
+                        children: [
+                          _buildTaskListPage(
+                              scrollController, _draggableScrollableController),
+                          _buildAddTaskPage(scrollController),
+                        ],
+                      ),
                     )),
-                const Align(
+                Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
-                    padding: EdgeInsets.all(10.0),
-                    // todo 4: Wrap Icon with RotationTransition widget
-                    child: Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      size: 40,
-                    ),
-                  ),
+                      padding: const EdgeInsets.all(10.0),
+                      // todo 4: Wrap Icon with RotationTransition widget
+                      child: Container(
+                        decoration: const BoxDecoration(
+                            borderRadius: BorderRadius.all(Radius.circular(32)),
+                            color: Colors.black12),
+                        height: 6.0,
+                        width: 60.0,
+                      )),
                 ),
               ],
             );
@@ -285,15 +275,10 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildTaskListPage(ScrollController scrollController) {
-    // 為了讓 DraggableScrollableSheet 的拖曳和內容滾動協同工作，
-    // 我們將 PageView 內部的內容再次包裹在 SingleChildScrollView 中，
-    // 並傳遞 DraggableScrollableSheet 提供的 scrollController。
-    final bool isCurrentPage = _pageController.hasClients
-        ? _pageController.page?.round() == 0
-        : _pageController.initialPage == 0;
+  Widget _buildTaskListPage(ScrollController scrollController,
+      DraggableScrollableController draggableScrollableController) {
     return SingleChildScrollView(
-      controller: isCurrentPage ? scrollController : null, // 只有在當前頁面時才使用主滾動控制器
+      controller: scrollController,
       child: Column(
         children: [
           Padding(
@@ -305,13 +290,20 @@ class _MyHomePageState extends State<MyHomePage> {
                   style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                // 點擊按鈕切換到第二頁
                 IconButton(
                   onPressed: () {
-                    _pageController.nextPage(
+                    draggableScrollableController
+                        .animateTo(
+                      0.95,
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeOut,
-                    );
+                    )
+                        .whenComplete(() {
+                      _pageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    });
                   },
                   icon: const Icon(Icons.add),
                 ),
@@ -319,23 +311,17 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
           // 列表內容
-          for (final task in tasks)
+          for (final task in widget.taskService.tasks)
             Dismissible(
               key: UniqueKey(),
               onDismissed: (direction) {
                 setState(() {
-                  tasks.remove(task);
-                  // 您的 t, saveTask 邏輯...
-                  if (tasks.isNotEmpty) {
-                    t = tasks[0].duration;
-                  } else {
-                    t = 0;
-                  }
-                  saveTask();
+                  widget.taskService.remove(task);
                 });
               },
               child: Column(
                 children: [
+                  const SizedBox(height: 7),
                   Card(
                     color: Color(task.taskColor),
                     child: Padding(
@@ -348,7 +334,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold)),
                           const Spacer(),
-                          Text(_formatTime(t),
+                          Text(_formatTime(task.duration),
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
@@ -357,11 +343,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 7),
                 ],
               ),
             ),
-          const SizedBox(height: 200), // 增加一些高度來測試滾動
         ],
       ),
     );
@@ -369,105 +354,183 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // 新增任務頁面
   Widget _buildAddTaskPage(ScrollController scrollController) {
-    // 新增任務頁面也需要包裹在 SingleChildScrollView 中，以便在表單很長時可以滾動
-    final bool isCurrentPage = _pageController.hasClients
-        ? _pageController.page?.round() == 1
-        : _pageController.initialPage == 1;
-    int _workType = 0;
+    int workType = 0;
     final nameTEC = TextEditingController();
-
+    final minTEC = TextEditingController();
+    final secTEC = TextEditingController();
+    final formKey = GlobalKey<FormState>();
     return SingleChildScrollView(
-      controller: isCurrentPage ? scrollController : null,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        controller: scrollController,
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 點擊返回第一頁
-              IconButton(
-                onPressed: () {
-                  _pageController.previousPage(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                icon: const Icon(Icons.arrow_back),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    },
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Text(
+                    "新增任務",
+                    style:
+                        TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
-              const Text(
-                "新增任務",
-                style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "  型別",
+                      textAlign: TextAlign.start,
+                      style: TextStyle(color: Colors.black87),
+                    ),
+                    const SizedBox(
+                      height: 10.0,
+                    ),
+                    DropdownButtonFormField<int>(
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text("工作"),
+                        ),
+                        DropdownMenuItem(
+                          value: 1,
+                          child: Text("休息"),
+                        )
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          workType = value!;
+                        });
+                      },
+                      value: workType,
+                    ),
+                    const SizedBox(
+                      height: 20.0,
+                    ),
+                    const Text(
+                      "  名稱",
+                      textAlign: TextAlign.start,
+                      style: TextStyle(color: Colors.black87),
+                    ),
+                    const SizedBox(
+                      height: 10.0,
+                    ),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                        labelText: "請輸入名稱",
+                        border: OutlineInputBorder(),
+                      ),
+                      controller: nameTEC,
+                      validator: (value) {
+                        return value!.isEmpty ? "名稱為必填欄位" : null;
+                      },
+                    ),
+                    const SizedBox(
+                      height: 20.0,
+                    ),
+                    const Text(
+                      "  時間長度",
+                      textAlign: TextAlign.start,
+                      style: TextStyle(color: Colors.black87),
+                    ),
+                    const SizedBox(
+                      height: 10.0,
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            keyboardType: TextInputType.number,
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            controller: minTEC,
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              return value!.isEmpty ? "必填欄位" : null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(
+                          width: 15.0,
+                        ),
+                        const Text(
+                          ":",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 32.0),
+                        ),
+                        const SizedBox(
+                          width: 15.0,
+                        ),
+                        Expanded(
+                          child: TextFormField(
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            controller: secTEC,
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              return value!.isEmpty ? "必填欄位" : null;
+                            },
+                          ),
+                        )
+                      ],
+                    ),
+                    ElevatedButton.icon(
+                      label: const Text("新增"),
+                      onPressed: () {
+                        if ((formKey.currentState as FormState).validate()) {
+                          setState(() {
+                            widget.taskService.tasks.add(Task(
+                                name: nameTEC.text,
+                                type: workType,
+                                duration: 60 * int.parse(minTEC.text) +
+                                    int.parse(secTEC.text),
+                                taskColor: 0xFFFF0000));
+                            widget.taskService.saveTasks();
+                          });
+                          _pageController.previousPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepOrange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButtonFormField<int>(
-                  decoration: const InputDecoration(
-                    labelText: '型別',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 0,
-                      child: Text("工作"),
-                    ),
-                    DropdownMenuItem(
-                      value: 1,
-                      child: Text("休息"),
-                    )
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _workType = value!;
-                    });
-                  },
-                  value: _workType,
-                ),
-                const SizedBox(
-                  height: 20.0,
-                ),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "名稱",
-                    border: OutlineInputBorder(),
-                  ),
-                  controller: nameTEC,
-                ),
-                const SizedBox(
-                  height: 20.0,
-                ),
-                const Text(
-                  "  時間長度",
-                  textAlign: TextAlign.start,
-                  style: TextStyle(color: Colors.black87),
-                ),
-                ElevatedButton.icon(
-                  label:
-                      const Text("新增"),
-                  onPressed: () {
-                    setState(() {
-                      tasks.add(Task(name: nameTEC.text,type: _workType, duration: 5, taskColor: 0xFFFF0000));
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12), 
-                    ),
-                  ),
-                ),
-                // ... 更多表單元件
-              ],
-            ),
-          ),
-          const SizedBox(height: 300), // 增加高度來測試滾動
-        ],
-      ),
-    );
+        ));
   }
 }
 
