@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tomato_bo/analysis.dart';
-import 'package:tomato_bo/taskservice.dart';
+import 'package:tomato_bo/task_service.dart';
 
 enum TimerState { running, paused, stopped }
 
@@ -46,6 +46,7 @@ class Task {
 }
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   final taskService = TaskService();
   await taskService.loadTasks();
   runApp(MyApp(taskService: taskService));
@@ -86,7 +87,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final PageController _pageController = PageController();
   final DraggableScrollableController _draggableScrollableController =
       DraggableScrollableController();
-  int t = 0;
+  final ValueNotifier<int> t = ValueNotifier<int>(0);
+
   String _formatTime(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
@@ -95,21 +97,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _startTimer() {
     if (_timerState == TimerState.running) return;
+    if (t.value <= 0) return;
     setState(() {
       _timerState = TimerState.running;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        t--;
-      });
-      if (t <= 0) {
+      t.value -= 1;
+      if (t.value <= 0) {
         HapticFeedback.vibrate();
         widget.taskService.removeAt(0);
         setState(() {
-          t = (widget.taskService.tasks.isNotEmpty)
-              ? widget.taskService.tasks[0].duration
-              : 0;
+          updateTimer();
           _timerState = TimerState.stopped;
+          _timer?.cancel();
         });
       }
     });
@@ -122,12 +122,18 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void updateTimer() {
+    setState(() {
+      t.value = (widget.taskService.tasks.isNotEmpty)
+          ? widget.taskService.tasks[0].duration
+          : 0;
+    });
+  }
+
   @override
   void initState() {
+    updateTimer();
     super.initState();
-    t = (widget.taskService.tasks.isNotEmpty)
-      ? widget.taskService.tasks[0].duration
-      : 0;
   }
 
   @override
@@ -167,10 +173,14 @@ class _MyHomePageState extends State<MyHomePage> {
               const SizedBox(
                 height: 70,
               ),
-              CustomPaint(
-                painter: ClockPainter(n: t),
-                size: const Size(100, 250),
-              ),
+              ValueListenableBuilder(
+                  valueListenable: t,
+                  builder: (context, value, child) {
+                    return CustomPaint(
+                      painter: ClockPainter(n: t.value),
+                      size: const Size(100, 250),
+                    );
+                  }),
               const SizedBox(
                 height: 45,
               ),
@@ -181,11 +191,15 @@ class _MyHomePageState extends State<MyHomePage> {
               const SizedBox(
                 height: 10,
               ),
-              Text(
-                _formatTime(t),
-                style: const TextStyle(
-                    fontSize: 45.0, fontWeight: FontWeight.bold),
-              ),
+              ValueListenableBuilder(
+                  valueListenable: t,
+                  builder: (context, value, child) {
+                    return Text(
+                      _formatTime(value),
+                      style: const TextStyle(
+                          fontSize: 45.0, fontWeight: FontWeight.bold),
+                    );
+                  }),
               const SizedBox(
                 height: 10,
               ),
@@ -195,13 +209,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   TimerState.paused => "繼續",
                   TimerState.running => "暫停",
                 }),
-                onPressed: () {
-                  if (_timerState == TimerState.running) {
-                    _pauseTimer();
-                  } else {
-                    _startTimer();
-                  }
-                },
+                onPressed: (t.value <= 0)
+                    ? null
+                    : () {
+                        if (_timerState == TimerState.running) {
+                          _pauseTimer();
+                        } else {
+                          _startTimer();
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   fixedSize: const Size(160, 40),
                   backgroundColor: (TimerState.running != _timerState)
@@ -247,6 +263,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           (BuildContext context, BoxConstraints constraints) =>
                               PageView(
                         controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
                         children: [
                           _buildTaskListPage(
                               scrollController, _draggableScrollableController),
@@ -292,6 +309,29 @@ class _MyHomePageState extends State<MyHomePage> {
                 const Spacer(),
                 IconButton(
                   onPressed: () {
+                    setState(() {
+                      widget.taskService.add(Task(
+                          name: "範例任務",
+                          type: TaskType.work,
+                          duration: 5,
+                          taskColor: TaskColor.red));
+                      widget.taskService.add(Task(
+                          name: "範例任務2",
+                          type: TaskType.work,
+                          duration: 6,
+                          taskColor: TaskColor.green));
+                      widget.taskService.add(Task(
+                          name: "範例任務3",
+                          type: TaskType.work,
+                          duration: 7,
+                          taskColor: TaskColor.blue));
+                      updateTimer();
+                    });
+                  },
+                  icon: const Icon(Icons.adobe_rounded),
+                ),
+                IconButton(
+                  onPressed: () {
                     draggableScrollableController
                         .animateTo(
                       0.95,
@@ -311,42 +351,79 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
           // 列表內容
-          for (final task in widget.taskService.tasks)
-            Dismissible(
-              key: UniqueKey(),
-              onDismissed: (direction) {
-                setState(() {
-                  widget.taskService.remove(task);
-                });
-              },
-              child: Column(
-                children: [
-                  const SizedBox(height: 7),
-                  Card(
-                    color: Color(task.taskColor),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14.0),
-                      child: Row(
-                        children: [
-                          Text(task.name,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold)),
-                          const Spacer(),
-                          Text(_formatTime(task.duration),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                ],
+          if (widget.taskService.tasks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Text(
+                "目前沒有任務，請新增任務。",
+                style: TextStyle(color: Colors.black54),
               ),
             ),
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const ClampingScrollPhysics(),
+            itemBuilder: (context, index) {
+              final task = widget.taskService.tasks[index];
+              return Dismissible(
+                  key: UniqueKey(),
+                  onDismissed: (direction) {
+                    setState(() {
+                      if (widget.taskService.tasks.first == task) {
+                        _timerState = TimerState.stopped;
+                        _timer?.cancel();
+                        widget.taskService.remove(task);
+                        updateTimer();
+                      } else {
+                        widget.taskService.remove(task);
+                      }
+                    });
+                  },
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 7),
+                      Card(
+                        color: Color(task.taskColor),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14.0),
+                          child: Row(
+                            children: [
+                              Text(task.name,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              Text(_formatTime(task.duration),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                    ],
+                  ),
+                );
+            }, 
+            itemCount: widget.taskService.tasks.length, 
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (oldIndex < newIndex) {
+                  newIndex -= 1;
+                }
+                final task = widget.taskService.tasks.removeAt(oldIndex);
+                widget.taskService.tasks.insert(newIndex, task);
+                widget.taskService.saveTasks();
+                if (oldIndex == 0 || newIndex == 0) {
+                  _timerState = TimerState.stopped;
+                  _timer?.cancel();
+                  updateTimer();
+                }
+              });
+            }
+          )
         ],
       ),
     );
@@ -510,6 +587,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                     int.parse(secTEC.text),
                                 taskColor: 0xFFFF0000));
                             widget.taskService.saveTasks();
+                            if (widget.taskService.tasks.length == 1) {
+                              updateTimer();
+                            }
                           });
                           _pageController.previousPage(
                             duration: const Duration(milliseconds: 300),

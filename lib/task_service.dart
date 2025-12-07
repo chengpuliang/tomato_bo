@@ -13,12 +13,10 @@ class TaskService {
   Future<void> loadTasks() async {
     final file = File(taskFilePath);
     if (await file.exists() == false) return;
-    file.readAsString().then((s) {
-      List<dynamic> decoded = jsonDecode(s);
-      tasks
-        ..clear()
-        ..addAll(decoded.map((t) => Task.fromMap(t)));
-    });
+    List<dynamic> decoded = jsonDecode(await file.readAsString());
+    tasks
+      ..clear()
+      ..addAll(decoded.map((t) => Task.fromMap(t)));
   }
 
   void remove(Task task) {
