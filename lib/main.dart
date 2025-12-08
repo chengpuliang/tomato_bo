@@ -234,8 +234,8 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         DraggableScrollableSheet(
           controller: _draggableScrollableController,
-          initialChildSize: 0.24,
-          minChildSize: 0.24,
+          initialChildSize: 0.2,
+          minChildSize: 0.2,
           maxChildSize: 0.95,
           snap: true,
           builder: (BuildContext context, ScrollController scrollController) {
@@ -294,138 +294,135 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget _buildTaskListPage(ScrollController scrollController,
       DraggableScrollableController draggableScrollableController) {
-    return SingleChildScrollView(
-      controller: scrollController,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 10.0, bottom: 5.0),
-            child: Row(
-              children: [
-                const Text(
-                  "任務列表",
-                  style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      widget.taskService.add(Task(
-                          name: "範例任務",
-                          type: TaskType.work,
-                          duration: 5,
-                          taskColor: TaskColor.red));
-                      widget.taskService.add(Task(
-                          name: "範例任務2",
-                          type: TaskType.work,
-                          duration: 6,
-                          taskColor: TaskColor.green));
-                      widget.taskService.add(Task(
-                          name: "範例任務3",
-                          type: TaskType.work,
-                          duration: 7,
-                          taskColor: TaskColor.blue));
-                      updateTimer();
-                    });
-                  },
-                  icon: const Icon(Icons.adobe_rounded),
-                ),
-                IconButton(
-                  onPressed: () {
-                    draggableScrollableController
-                        .animateTo(
-                      0.95,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 10.0, bottom: 5.0),
+          child: Row(
+            children: [
+              const Text(
+                "任務列表",
+                style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    widget.taskService.add(Task(
+                        name: "範例任務",
+                        type: TaskType.work,
+                        duration: 5,
+                        taskColor: TaskColor.red));
+                    widget.taskService.add(Task(
+                        name: "範例任務2",
+                        type: TaskType.work,
+                        duration: 6,
+                        taskColor: TaskColor.green));
+                    widget.taskService.add(Task(
+                        name: "範例任務3",
+                        type: TaskType.work,
+                        duration: 7,
+                        taskColor: TaskColor.blue));
+                    updateTimer();
+                  });
+                },
+                icon: const Icon(Icons.adobe_rounded),
+              ),
+              IconButton(
+                onPressed: () {
+                  draggableScrollableController
+                      .animateTo(
+                    0.95,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  )
+                      .whenComplete(() {
+                    _pageController.nextPage(
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeOut,
-                    )
-                        .whenComplete(() {
-                      _pageController.nextPage(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    });
-                  },
-                  icon: const Icon(Icons.add),
-                ),
-              ],
+                    );
+                  });
+                },
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
+        ),
+        // 列表內容
+        if (widget.taskService.tasks.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Text(
+              "目前沒有任務，請新增任務。",
+              style: TextStyle(color: Colors.black54),
             ),
           ),
-          // 列表內容
-          if (widget.taskService.tasks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Text(
-                "目前沒有任務，請新增任務。",
-                style: TextStyle(color: Colors.black54),
-              ),
-            ),
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const ClampingScrollPhysics(),
-            itemBuilder: (context, index) {
-              final task = widget.taskService.tasks[index];
-              return Dismissible(
-                  key: UniqueKey(),
-                  onDismissed: (direction) {
-                    setState(() {
-                      if (widget.taskService.tasks.first == task) {
-                        _timerState = TimerState.stopped;
-                        _timer?.cancel();
-                        widget.taskService.remove(task);
-                        updateTimer();
-                      } else {
-                        widget.taskService.remove(task);
-                      }
-                    });
-                  },
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 7),
-                      Card(
-                        color: Color(task.taskColor),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14.0),
-                          child: Row(
-                            children: [
-                              Text(task.name,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              Text(_formatTime(task.duration),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold)),
-                            ],
+        Expanded(
+            child: ReorderableListView.builder(
+                shrinkWrap: true,
+                scrollController: scrollController,
+                itemBuilder: (context, index) {
+                  final task = widget.taskService.tasks[index];
+                  return Dismissible(
+                    key: ObjectKey(task),
+                    onDismissed: (direction) {
+                      setState(() {
+                        if (widget.taskService.tasks.first == task) {
+                          _timerState = TimerState.stopped;
+                          _timer?.cancel();
+                          widget.taskService.remove(task);
+                          updateTimer();
+                        } else {
+                          widget.taskService.remove(task);
+                        }
+                      });
+                    },
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 7),
+                        Card(
+                          color: Color(task.taskColor),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Row(
+                              children: [
+                                Text(task.name,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text(_formatTime(task.duration),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 7),
-                    ],
-                  ),
-                );
-            }, 
-            itemCount: widget.taskService.tasks.length, 
-            onReorder: (oldIndex, newIndex) {
-              setState(() {
-                if (oldIndex < newIndex) {
-                  newIndex -= 1;
-                }
-                final task = widget.taskService.tasks.removeAt(oldIndex);
-                widget.taskService.tasks.insert(newIndex, task);
-                widget.taskService.saveTasks();
-                if (oldIndex == 0 || newIndex == 0) {
-                  _timerState = TimerState.stopped;
-                  _timer?.cancel();
-                  updateTimer();
-                }
-              });
-            }
-          )
-        ],
-      ),
+                        const SizedBox(height: 7),
+                      ],
+                    ),
+                  );
+                },
+                itemCount: widget.taskService.tasks.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (oldIndex < newIndex) {
+                      newIndex -= 1;
+                    }
+                    final task = widget.taskService.tasks.removeAt(oldIndex);
+                    widget.taskService.tasks.insert(newIndex, task);
+                    widget.taskService.saveTasks();
+                    if (oldIndex == 0 || newIndex == 0) {
+                      _timerState = TimerState.stopped;
+                      _timer?.cancel();
+                      updateTimer();
+                    }
+                  });
+                }))
+      ],
     );
   }
 
