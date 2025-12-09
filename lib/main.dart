@@ -81,13 +81,16 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage>
+    with SingleTickerProviderStateMixin {
   TimerState _timerState = TimerState.stopped;
   Timer? _timer;
   final PageController _pageController = PageController();
   final DraggableScrollableController _draggableScrollableController =
       DraggableScrollableController();
   final ValueNotifier<int> t = ValueNotifier<int>(0);
+  late AnimationController _clockAniCtrl;
+  late Animation<double> _clockAnimation;
 
   String _formatTime(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
@@ -98,6 +101,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void _startTimer() {
     if (_timerState == TimerState.running) return;
     if (t.value <= 0) return;
+    _clockAniCtrl.stop();
     setState(() {
       _timerState = TimerState.running;
     });
@@ -105,6 +109,7 @@ class _MyHomePageState extends State<MyHomePage> {
       t.value -= 1;
       if (t.value <= 0) {
         HapticFeedback.vibrate();
+        _clockAniCtrl.repeat(reverse: true);
         widget.taskService.removeAt(0);
         setState(() {
           updateTimer();
@@ -134,6 +139,10 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     updateTimer();
     super.initState();
+    _clockAniCtrl =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _clockAnimation =
+        Tween<double>(begin: -pi/12, end: pi/12).animate(_clockAniCtrl);
   }
 
   @override
@@ -173,12 +182,19 @@ class _MyHomePageState extends State<MyHomePage> {
               const SizedBox(
                 height: 70,
               ),
-              ValueListenableBuilder(
-                  valueListenable: t,
-                  builder: (context, value, child) {
-                    return CustomPaint(
-                      painter: ClockPainter(n: t.value),
-                      size: const Size(100, 250),
+              AnimatedBuilder(
+                  animation: _clockAnimation,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: (_clockAniCtrl.isAnimating) ? _clockAnimation.value : 0,
+                      child: ValueListenableBuilder(
+                          valueListenable: t,
+                          builder: (context, value, child) {
+                            return CustomPaint(
+                              painter: ClockPainter(n: t.value),
+                              size: const Size(100, 250),
+                            );
+                          }),
                     );
                   }),
               const SizedBox(
