@@ -16,6 +16,7 @@ class TaskColor {
   static const red = 0xFFFF0000;
   static const green = 0xFF00FF00;
   static const blue = 0xFF0000FF;
+  static const colorList = [red,green,blue];
 }
 
 class Task {
@@ -156,6 +157,7 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.white,
         title: Text(widget.title),
@@ -445,6 +447,7 @@ class _MyHomePageState extends State<MyHomePage>
   // 新增任務頁面
   Widget _buildAddTaskPage(ScrollController scrollController) {
     int workType = 0;
+    int? colorGroupValue = TaskColor.colorList.first;
     final nameTEC = TextEditingController();
     final minTEC = TextEditingController();
     final secTEC = TextEditingController();
@@ -588,7 +591,28 @@ class _MyHomePageState extends State<MyHomePage>
                         )
                       ],
                     ),
-                    ElevatedButton.icon(
+                    const SizedBox(
+                      height: 32.0,
+                    ),
+                    Row(
+                      children: [
+                        for (var color in TaskColor.colorList)
+                          Radio<int>(value: color, groupValue: colorGroupValue, onChanged: (int? value) {
+                            print(value);
+                            setState(() {
+                              colorGroupValue = value;
+                            });
+                          }
+                          ,fillColor: WidgetStatePropertyAll(Color(color)),)
+                      ],
+                    ),
+                    const SizedBox(
+                      height: 32.0,
+                    ),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 45.0,
+                      child: ElevatedButton.icon(
                       label: const Text("新增"),
                       onPressed: () {
                         if ((formKey.currentState as FormState).validate()) {
@@ -618,6 +642,7 @@ class _MyHomePageState extends State<MyHomePage>
                         ),
                       ),
                     ),
+                    )
                   ],
                 ),
               ),
