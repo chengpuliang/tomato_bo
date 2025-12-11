@@ -13,10 +13,13 @@ class TaskType {
 }
 
 class TaskColor {
-  static const red = 0xFFFF0000;
-  static const green = 0xFF00FF00;
-  static const blue = 0xFF0000FF;
-  static const colorList = [red,green,blue];
+  static const yellow = 0xFFEDCB77;
+  static const green = 0xFF63C1BD;
+  static const red = 0xFFE4645B;
+  static const purple = 0xFF92ACE5;
+  static const deepBlue = 0xFF5595C4;
+  static const lightBlue = 0xFF579ECF;
+  static const colorList = [yellow, green, red, purple, deepBlue, lightBlue];
 }
 
 class Task {
@@ -92,6 +95,12 @@ class _MyHomePageState extends State<MyHomePage>
   final ValueNotifier<int> t = ValueNotifier<int>(0);
   late AnimationController _clockAniCtrl;
   late Animation<double> _clockAnimation;
+  int? colorGroupValue = TaskColor.colorList.first;
+  int workType = 0;
+  final nameTEC = TextEditingController();
+  final minTEC = TextEditingController();
+  final secTEC = TextEditingController();
+  final formKey = GlobalKey<FormState>();
 
   String _formatTime(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
@@ -140,10 +149,10 @@ class _MyHomePageState extends State<MyHomePage>
   void initState() {
     updateTimer();
     super.initState();
-    _clockAniCtrl =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _clockAniCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 100));
     _clockAnimation =
-        Tween<double>(begin: -pi/12, end: pi/12).animate(_clockAniCtrl);
+        Tween<double>(begin: -pi / 12, end: pi / 12).animate(_clockAniCtrl);
   }
 
   @override
@@ -188,7 +197,9 @@ class _MyHomePageState extends State<MyHomePage>
                   animation: _clockAnimation,
                   builder: (context, child) {
                     return Transform.rotate(
-                      angle: (_clockAniCtrl.isAnimating) ? _clockAnimation.value : 0,
+                      angle: (_clockAniCtrl.isAnimating)
+                          ? _clockAnimation.value
+                          : 0,
                       child: ValueListenableBuilder(
                           valueListenable: t,
                           builder: (context, value, child) {
@@ -340,7 +351,7 @@ class _MyHomePageState extends State<MyHomePage>
                         name: "範例任務3",
                         type: TaskType.work,
                         duration: 7,
-                        taskColor: TaskColor.blue));
+                        taskColor: TaskColor.deepBlue));
                     updateTimer();
                   });
                 },
@@ -377,7 +388,6 @@ class _MyHomePageState extends State<MyHomePage>
           ),
         Expanded(
             child: ReorderableListView.builder(
-                shrinkWrap: true,
                 scrollController: scrollController,
                 itemBuilder: (context, index) {
                   final task = widget.taskService.tasks[index];
@@ -446,14 +456,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   // 新增任務頁面
   Widget _buildAddTaskPage(ScrollController scrollController) {
-    int workType = 0;
-    int? colorGroupValue = TaskColor.colorList.first;
-    final nameTEC = TextEditingController();
-    final minTEC = TextEditingController();
-    final secTEC = TextEditingController();
-    final formKey = GlobalKey<FormState>();
     return SingleChildScrollView(
-        controller: scrollController,
         child: Form(
           key: formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -594,16 +597,27 @@ class _MyHomePageState extends State<MyHomePage>
                     const SizedBox(
                       height: 32.0,
                     ),
+                    const Text(
+                      "  顏色",
+                      textAlign: TextAlign.start,
+                      style: TextStyle(color: Colors.black87),
+                    ),
+                    const SizedBox(
+                      height: 10.0,
+                    ),
                     Row(
                       children: [
                         for (var color in TaskColor.colorList)
-                          Radio<int>(value: color, groupValue: colorGroupValue, onChanged: (int? value) {
-                            print(value);
-                            setState(() {
-                              colorGroupValue = value;
-                            });
-                          }
-                          ,fillColor: WidgetStatePropertyAll(Color(color)),)
+                          Radio<int>(
+                            value: color,
+                            groupValue: colorGroupValue,
+                            onChanged: (int? value) {
+                              setState(() {
+                                colorGroupValue = color;
+                              });
+                            },
+                            fillColor: WidgetStatePropertyAll(Color(color)),
+                          )
                       ],
                     ),
                     const SizedBox(
@@ -613,35 +627,35 @@ class _MyHomePageState extends State<MyHomePage>
                       width: double.infinity,
                       height: 45.0,
                       child: ElevatedButton.icon(
-                      label: const Text("新增"),
-                      onPressed: () {
-                        if ((formKey.currentState as FormState).validate()) {
-                          setState(() {
-                            widget.taskService.tasks.add(Task(
-                                name: nameTEC.text,
-                                type: workType,
-                                duration: 60 * int.parse(minTEC.text) +
-                                    int.parse(secTEC.text),
-                                taskColor: 0xFFFF0000));
-                            widget.taskService.saveTasks();
-                            if (widget.taskService.tasks.length == 1) {
-                              updateTimer();
-                            }
-                          });
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        label: const Text("新增"),
+                        onPressed: () {
+                          if ((formKey.currentState as FormState).validate()) {
+                            setState(() {
+                              widget.taskService.tasks.add(Task(
+                                  name: nameTEC.text,
+                                  type: workType,
+                                  duration: 60 * int.parse(minTEC.text) +
+                                      int.parse(secTEC.text),
+                                  taskColor: colorGroupValue!));
+                              widget.taskService.saveTasks();
+                              if (widget.taskService.tasks.length == 1) {
+                                updateTimer();
+                              }
+                            });
+                            _pageController.previousPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                    ),
                     )
                   ],
                 ),
