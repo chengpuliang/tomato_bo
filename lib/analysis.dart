@@ -4,7 +4,8 @@ class AnalysisPage extends StatelessWidget {
   const AnalysisPage({super.key});
   @override
   Widget build(BuildContext context) {
-    var data = [10,30];
+    var data = [10, 30, 25, 17, 24, 23, 14];
+    final double paddingVal = ((MediaQuery.sizeOf(context).width - 165.0)/7)-6;
     return Scaffold(
       appBar: AppBar(
         title: const Text('數據分析'),
@@ -17,13 +18,18 @@ class AnalysisPage extends StatelessWidget {
               children: [
                 CustomPaint(
                   painter: ChartPainter(),
-                  size: const Size(100,200),
+                  size: Size( MediaQuery.sizeOf(context).width, 280),
                 ),
-                Row(
-                  children: [
-                    for (var day in data) 
-                      Bar(value: day,)
-                  ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(50, 0, 50, 0),
+                  child: Row(
+                    children: [
+                      for (var day in data)
+                        Bar(
+                          value: day,padding: paddingVal,
+                        )
+                    ],
+                  ),
                 )
               ],
             )
@@ -35,8 +41,9 @@ class AnalysisPage extends StatelessWidget {
 }
 
 class Bar extends StatefulWidget {
-  const Bar({required this.value});
+  const Bar({required this.value, required this.padding});
   final int value;
+  final double padding;
 
   @override
   State<StatefulWidget> createState() => _BarState();
@@ -51,11 +58,11 @@ class _BarState extends State<Bar> with SingleTickerProviderStateMixin {
       animation: _animationController,
       builder: (context, child) {
         return Container(
-          padding: EdgeInsets.all(12),
+          padding: EdgeInsets.fromLTRB(widget.padding, 277-_animation.value, 0, 0),
           child: Container(
               decoration: const BoxDecoration(
                   color: Colors.orange,
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(12),topRight: Radius.circular(12))),
               height: _animation.value,
               width: 15.0),
         );
@@ -80,10 +87,12 @@ class ChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = 8.0
+      ..strokeWidth = 6.0
       ..color = Colors.black;
-    canvas.drawLine(const Offset(10, 10), Offset(10, size.height), paint);
+    canvas.drawLine(const Offset(50, 10), Offset(50, size.height), paint);
+    canvas.drawLine(Offset(50, size.height-50), Offset(size.width-50, size.height-50), paint);
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return false;
